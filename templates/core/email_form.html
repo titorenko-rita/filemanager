@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+
+{% block title %}Отправить отчет{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm mx-auto" style="max-width: 600px;">
+  <div class="card-body">
+    <h3 class="card-title mb-4">Отправить отчет</h3>
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <div class="mb-3">
+        <label for="id_to_email" class="form-label">Email получателя:</label>
+        {{ form.to_email }}
+      </div>
+      <div class="mb-3">
+        <label for="id_subject" class="form-label">Тема:</label>
+        {{ form.subject }}
+      </div>
+      <div class="mb-3">
+        <label for="id_message" class="form-label">Сообщение:</label>
+        {{ form.message }}
+      </div>
+      <div class="mb-3">
+        <label for="id_selected_file" class="form-label">Выберите файл:</label>
+        <div style="max-width: 100%; overflow-x: auto;">
+          {{ form.selected_file }}
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary">Отправить</button>
+      <a href="{% url 'file_list' %}" class="btn btn-link">Вернуться к списку файлов</a>
+    </form>
+    {% if messages %}
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} mt-3">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+  </div>
+</div>
+{% endblock %} 

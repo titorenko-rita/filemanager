@@ -1,0 +1,37 @@
+stages:
+  - test
+  - build
+
+variables:
+  DOCKER_DRIVER: overlay2
+
+test:
+  stage: test
+  image: python:3.10
+  services:
+    - postgres:15
+    - redis:7
+  variables:
+    POSTGRES_DB: filemanager
+    POSTGRES_USER: filemanager
+    POSTGRES_PASSWORD: filemanager
+    POSTGRES_HOST: postgres
+    POSTGRES_PORT: 5432
+    USE_POSTGRES: "True"
+    REDIS_URL: redis://redis:6379/0
+  before_script:
+    - pip install -r requirements.txt
+    - python manage.py migrate
+  script:
+    - python manage.py test
+
+docker-build:
+  stage: build
+  image: docker:latest
+  services:
+    - docker:dind
+  script:
+    - docker build -t $CI_REGISTRY_IMAGE:latest .
+    - docker push $CI_REGISTRY_IMAGE:latest
+  only:
+    - main

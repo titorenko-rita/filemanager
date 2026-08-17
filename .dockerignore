@@ -1,0 +1,15 @@
+.git
+.github
+.idea
+.pytest_cache
+__pycache__
+*.py[cod]
+*.log
+.coverage
+.env
+db.sqlite3
+filemanager.git
+media
+staticfiles
+venv
+venv310

@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+venv310/
+
+# Django runtime data
+*.sqlite3
+*.log
+logs/
+media/
+staticfiles/
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.bak
+*.swp
+.DS_Store
+
+# Local repository backup
+filemanager.git/

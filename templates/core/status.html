@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+
+{% block title %}Статус системы{% endblock %}
+
+{% block content %}
+<div class="container profile-container">
+    <h1>Статус системы</h1>
+    
+    <div class="status-info">
+        <h2>Общая информация</h2>
+        <p><strong>Количество пользователей:</strong> {{ total_users }}</p>
+        <p><strong>Количество файлов:</strong> {{ total_files }}</p>
+        <p><strong>Общий размер файлов:</strong> {{ total_files_size_mb }} MB</p>
+        <p><strong>Статус Email-сервиса:</strong> {{ email_status }}</p>
+    </div>
+
+    <div class="profile-actions">
+        <a href="{% url 'file_list' %}" class="button-link">К списку файлов</a>
+    </div>
+</div>
+{% endblock %} 

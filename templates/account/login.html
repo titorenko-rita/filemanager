@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% load crispy_forms_tags %}
+
+{% block title %}Войти{% endblock %}
+
+{% block content %}
+<div class="container auth-form-container">
+    <h1>Войти</h1>
+
+    <p>Если у вас еще нет учетной записи, пожалуйста, сначала <a href="{% url 'account_signup' %}">зарегистрируйтесь</a>.</p>
+
+    <form class="login" method="POST" action="{% url 'account_login' %}">
+        {% csrf_token %}
+        {{ form|crispy }}
+        {% if redirect_field_value %}
+            <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}" />
+        {% endif %}
+        <a class="button-link" href="{% url 'account_reset_password' %}">Забыли свой пароль?</a>
+        <button class="button-link" type="submit">Войти</button>
+    </form>
+</div>
+{% endblock %} 
