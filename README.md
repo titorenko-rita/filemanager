@@ -34,6 +34,18 @@ python manage.py runserver
 
 Перед использованием замените `DJANGO_SECRET_KEY` в `.env`. Email, Telegram и Sentry необязательны; пустые значения отключают соответствующую интеграцию. Файл `.env` игнорируется Git и не должен попадать в коммиты.
 
+### Проверка отправки почты
+
+По умолчанию используется Mail.ru: `smtp.mail.ru`, порт `465`, SSL/TLS. В `EMAIL_HOST_PASSWORD` нужен пароль для внешнего приложения, а в настройках ящика должен быть разрешён доступ по IMAP, POP и SMTP. Все параметры транспорта (`EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USE_SSL`, `EMAIL_USE_TLS`, `EMAIL_TIMEOUT`) можно заменить через `.env`.
+
+Проверить реальную отправку письма на адрес уведомлений:
+
+```powershell
+docker compose exec -T django python manage.py shell -c "from django.conf import settings; from django.core.mail import send_mail; print(send_mail('FileManager: проверка SMTP', 'SMTP работает.', settings.DEFAULT_FROM_EMAIL, [settings.FILE_NOTIFICATION_EMAIL], fail_silently=False))"
+```
+
+Если возникает `The handshake operation timed out`, соединение блокируется до авторизации. Временно приостановите VPN/прокси (в частности TUN-режим) либо разрешите ему исходящие SMTP-порты `465`/`587`, затем повторите команду.
+
 ## Полный запуск через Docker
 
 Docker Compose поднимает PostgreSQL, Redis, Django, Celery, ML-сервис, Nginx, Prometheus и Grafana:

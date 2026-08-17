@@ -3,6 +3,7 @@ from django.core.mail import send_mail, EmailMessage
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _ # Импортируем функцию перевода
 from django.contrib.auth.decorators import login_required
+from django.contrib import messages
 from django.contrib.auth.models import User
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
@@ -29,7 +30,7 @@ def send_file_notification(file_instance, action):
     filename = os.path.basename(file_instance.file.name)
     subject = f'Файл {action}: {filename}'
     message = f'Файл {file_instance.file.name} был {action}.\nОписание: {file_instance.description}'
-    from_email = settings.EMAIL_HOST_USER
+    from_email = settings.DEFAULT_FROM_EMAIL
     to_email = settings.FILE_NOTIFICATION_EMAIL
     
     try:
@@ -124,8 +125,8 @@ def replace_file(request, file_id):
                 email = EmailMessage(
                     f'Файл заменен: {old_file_name} -> {file_instance.file.name}',
                     notification_message,
-                    settings.EMAIL_HOST_USER,
-                    [smtp-user@example.com']
+                    settings.DEFAULT_FROM_EMAIL,
+                    [settings.FILE_NOTIFICATION_EMAIL]
                 )
                 if file_instance.file and os.path.exists(file_instance.file.path):
                     email.attach_file(file_instance.file.path)
@@ -154,7 +155,7 @@ def send_report(request):
             subject = form.cleaned_data['subject']
             message = form.cleaned_data['message']
             selected_file = form.cleaned_data['selected_file']
-            from_email = settings.EMAIL_HOST_USER
+            from_email = settings.DEFAULT_FROM_EMAIL
 
             try:
                 email = EmailMessage(
@@ -165,11 +166,19 @@ def send_report(request):
                 )
                 if selected_file and os.path.exists(selected_file.file.path):
                     email.attach_file(selected_file.file.path)
-                email.send()
+                sent_count = email.send(fail_silently=False)
+                if sent_count != 1:
+                    raise RuntimeError('SMTP-сервер не подтвердил отправку письма')
                 logger.info(f"Отчет на почту {to_email} успешно отправлен пользователем {request.user.username}.")
+                messages.success(request, f'Отчёт отправлен на {to_email}.')
                 return redirect('file_list')
             except Exception as e:
                 logger.error(f"Ошибка отправки отчета на почту {to_email} пользователем {request.user.username}: {e}")
+                form.add_error(
+                    None,
+                    'Не удалось отправить письмо через SMTP. Проверьте подключение, '
+                    'SMTP-настройки и пароль для внешнего приложения.',
+                )
         else:
             logger.warning(f"Пользователь {request.user.username} пытался отправить отчет с ошибками формы: {form.errors}")
     else:
@@ -199,7 +208,7 @@ def delete_file(request, file_id):
         email = EmailMessage(
             f'Файл удален: {file_name}',
             f'Файл {file_name} был удален.\nОписание: {file_description}',
-            settings.EMAIL_HOST_USER,
+            settings.DEFAULT_FROM_EMAIL,
             [settings.FILE_NOTIFICATION_EMAIL]
         )
         email.send()
@@ -241,9 +250,14 @@ def status_page(request):
     
     total_files_size_mb = round(total_files_size / (1024 * 1024), 2) # Calculate this before logging
 
-    # Простая проверка статуса email-сервиса
+    # Наличие настроек не означает доступность удалённого SMTP-сервера.
     email_configured = settings.EMAIL_CONFIGURED
-    email_status = "Настроен и доступен" if email_configured else "Не настроен или не все данные указаны"
+    email_status = (
+        f"Настроен: {settings.EMAIL_HOST}:{settings.EMAIL_PORT} "
+        "(доступность проверяется при отправке)"
+        if email_configured
+        else "Не настроен или не все данные указаны"
+    )
 
     context = {
         'total_users': total_users,
@@ -286,7 +300,7 @@ class FileViewSet(viewsets.ModelViewSet):
             email = EmailMessage(
                 f'Файл заменен: {os.path.basename(old_file_name)} -> {os.path.basename(file_instance.file.name)}',
                 notification_message,
-                settings.EMAIL_HOST_USER,
+                settings.DEFAULT_FROM_EMAIL,
                 [settings.FILE_NOTIFICATION_EMAIL]
             )
             if file_instance.file and os.path.exists(file_instance.file.path):
@@ -309,7 +323,7 @@ class FileViewSet(viewsets.ModelViewSet):
             email = EmailMessage(
                 f'Файл удален: {os.path.basename(file_name)}',
                 f'Файл {file_name} был удален.\nОписание: {file_description}',
-                settings.EMAIL_HOST_USER,
+                settings.DEFAULT_FROM_EMAIL,
                 [settings.FILE_NOTIFICATION_EMAIL]
             )
             email.send()

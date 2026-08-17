@@ -176,29 +176,17 @@ def test_send_file_notification_mocked(mock_os_path_exists, mock_email_message, 
 @patch('core.views.EmailMessage')
 @patch('os.path.exists', return_value=True)
 def test_send_report_mocked(mock_os_path_exists, mock_email_message, authenticated_client, db, admin_user):
-    from core.forms import EmailForm
-
     # Create a dummy StoredFile instance for selection
     dummy_report_file = SimpleUploadedFile("report_dummy.txt", b"report dummy content")
     stored_file = StoredFile.objects.create(file=dummy_report_file, description='Report test', user=admin_user)
+    mock_email_message.return_value.send.return_value = 1
 
-    # Mock the request for form processing
-    from django.test.client import RequestFactory
-    factory = RequestFactory()
-    request = factory.post(reverse('send_report'), data={
+    response = authenticated_client.post(reverse('send_report'), data={
         'to_email': 'test@example.com',
         'subject': 'Test Report',
         'message': 'This is a test report.',
-        'selected_file': stored_file.id,  # Pass the ID of the StoredFile instance
+        'selected_file': stored_file.id,
     })
-    request.user = admin_user  # Attach the user to the request
-
-    # Mock the StoredFile.objects.get to return our dummy file
-    with patch('core.forms.StoredFile.objects.get') as mock_get_stored_file:
-        mock_get_stored_file.return_value = stored_file
-        # Call the view directly
-        from core.views import send_report
-        response = send_report(request)
 
     assert response.status_code == 302  # Should redirect
     mock_email_message.assert_called_once()
@@ -340,8 +328,9 @@ def test_report_email_send_failure(mock_email_message, authenticated_client, adm
             'selected_file': stored_file.id
         }
     )
-    
+
     assert response.status_code == 200  # Should return to form on error
+    assert 'Не удалось отправить письмо через SMTP' in response.content.decode()
     mock_email_message.return_value.send.assert_called_once()  # Email attempt should be made
 
 

@@ -35,6 +35,7 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
       ML_SERVICE_URL: http://ml_service:5000
+      DJANGO_ALLOWED_HOSTS: "127.0.0.1 localhost django"
       USE_POSTGRES: "True"
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432

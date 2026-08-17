@@ -6,6 +6,11 @@
 <div class="card shadow-sm mx-auto" style="max-width: 600px;">
   <div class="card-body">
     <h3 class="card-title mb-4">Отправить отчет</h3>
+    {% if form.non_field_errors %}
+      <div class="alert alert-danger" role="alert">
+        {{ form.non_field_errors }}
+      </div>
+    {% endif %}
     <form method="post" enctype="multipart/form-data">
       {% csrf_token %}
       <div class="mb-3">

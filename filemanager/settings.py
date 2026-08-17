@@ -177,22 +177,24 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Mail.ru SMTP settings
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.mail.ru'
-EMAIL_PORT = 465
-EMAIL_USE_SSL = True
-EMAIL_TIMEOUT = 10
+# SMTP settings. Defaults target Mail.ru, but every transport option can be
+# changed in .env without editing the application.
+EMAIL_BACKEND = os.environ.get(
+    'EMAIL_BACKEND',
+    'django.core.mail.backends.smtp.EmailBackend',
+)
+EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.mail.ru')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '465'))
+EMAIL_USE_SSL = os.environ.get('EMAIL_USE_SSL', 'True') == 'True'
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'False') == 'True'
+EMAIL_TIMEOUT = float(os.environ.get('EMAIL_TIMEOUT', '10'))
 EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', smtp-user@example.com')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
-FILE_NOTIFICATION_EMAIL = os.environ.get('FILE_NOTIFICATION_EMAIL', EMAIL_HOST_USER)
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL') or EMAIL_HOST_USER
+FILE_NOTIFICATION_EMAIL = os.environ.get('FILE_NOTIFICATION_EMAIL') or EMAIL_HOST_USER
 EMAIL_CONFIGURED = TESTING or bool(EMAIL_HOST_USER and EMAIL_HOST_PASSWORD)
 if not EMAIL_CONFIGURED:
     EMAIL_BACKEND = 'django.core.mail.backends.dummy.EmailBackend'
-
-# Возможно, эти строки уже есть, оставьте их или добавьте при необходимости
-# EMAIL_USE_TLS = False
-# EMAIL_TIMEOUT = 10
 
 # Authentication settings
 AUTHENTICATION_BACKENDS = [
