@@ -40,17 +40,33 @@ Docker Compose поднимает PostgreSQL, Redis, Django, Celery, ML-серв
 
 ```powershell
 Copy-Item .env.example .env
-docker compose up --build
+docker compose up -d --build
+docker compose ps
+```
+
+Для входа в административную панель создайте администратора:
+
+```powershell
+docker compose exec django python manage.py createsuperuser
 ```
 
 После запуска доступны:
 
 - приложение: <http://localhost/>;
+- регистрация: <http://localhost/accounts/signup/>;
+- административная панель: <http://localhost/admin/>;
+- состояние приложения: <http://localhost/status/>;
 - Prometheus: <http://localhost:9090/>;
 - Grafana: <http://localhost:3000/>;
 - метрики Django: <http://localhost/metrics>.
 
-Первый запуск ML-сервиса долгий: Docker скачивает spaCy-модель при сборке, а модель тональности Hugging Face — при первом старте контейнера. Для этого нужен интернет и несколько гигабайт свободного места.
+Первый запуск ML-сервиса долгий: Docker собирает CPU-версию PyTorch и spaCy-модель, а модель тональности Hugging Face (около 680 МБ) скачивает при первом старте контейнера. Она сохраняется в именованном томе `hf_cache`, поэтому повторно при обычной пересборке не скачивается. Для первой сборки нужен интернет и несколько гигабайт свободного места.
+
+Посмотреть журнал запуска:
+
+```powershell
+docker compose logs -f django celery ml_service
+```
 
 Остановка:
 

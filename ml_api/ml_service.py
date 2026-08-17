@@ -31,7 +31,7 @@ def get_sentiment(text: str) -> str:
     with torch.no_grad():
         logits = sentiment_model(**inputs).logits
     predicted_class_id = logits.argmax().item()
-    return ["negative", "neutral", "positive"][predicted_class_id]
+    return sentiment_model.config.id2label[predicted_class_id].lower()
 
 
 if platform.system() == "Windows":

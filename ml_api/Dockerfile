@@ -11,9 +11,14 @@ ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/5/tessdata
 
 WORKDIR /app
 COPY requirements.txt /app/requirements.txt
-RUN pip install --retries 10 --timeout 200 -r /app/requirements.txt && \
-    python -m spacy download ru_core_news_sm
+RUN pip install --retries 10 --timeout 200 \
+        --index-url https://pypi.org/simple \
+        --extra-index-url https://download.pytorch.org/whl/cpu \
+        torch==1.13.1+cpu && \
+    pip install --retries 10 --timeout 200 -r /app/requirements.txt
+RUN pip install --retries 10 --timeout 200 \
+    https://github.com/explosion/spacy-models/releases/download/ru_core_news_sm-3.8.0/ru_core_news_sm-3.8.0-py3-none-any.whl
 COPY ml_service.py /app/ml_service.py
 EXPOSE 5000
 
-CMD ["python", "ml_service.py"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--threads", "2", "--timeout", "120", "ml_service:app"]
