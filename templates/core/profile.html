@@ -1,36 +1,27 @@
 {% extends 'base.html' %}
 
-{% block title %}Личный кабинет{% endblock %}
+{% block title %}Профиль · FileManager{% endblock %}
 
 {% block content %}
-<div class="card shadow-sm mb-4">
-  <div class="card-body">
-    <h3 class="card-title mb-3">Личный кабинет</h3>
-    <h5 class="mb-2">Информация о пользователе</h5>
-    <p><strong>Имя пользователя:</strong> {{ user.username }}</p>
-    <p><strong>Email:</strong> {{ user.email }}</p>
-    <hr>
-    <h5 class="mb-2">Статистика</h5>
-    <p><strong>Всего файлов:</strong> {{ total_files }}</p>
-    <p><strong>Последняя активность:</strong> {{ last_activity|date:"d E Y г. H:i" }}</p>
-  </div>
+<header class="page-heading">
+  <div><p class="eyebrow">Личный кабинет</p><h1 class="page-title">Здравствуйте, {{ user.username }}</h1><p class="page-subtitle">{{ user.email|default:"Email не указан" }}</p></div>
+  <a href="{% url 'account_logout' %}" class="btn btn-soft">Выйти</a>
+</header>
+<div class="metric-grid mb-4">
+  <div class="metric"><div class="metric-label">Всего файлов</div><div class="metric-value">{{ total_files }}</div></div>
+  <div class="metric"><div class="metric-label">Последняя активность</div><div class="metric-value fs-5">{% if last_activity %}{{ last_activity|date:"d.m.Y H:i" }}{% else %}—{% endif %}</div></div>
+  <div class="metric"><div class="metric-label">Учётная запись</div><div class="metric-value fs-5">Активна</div></div>
 </div>
-<div class="card shadow-sm">
-  <div class="card-body">
-    <h5 class="card-title mb-3">Последние файлы</h5>
+<section class="app-card">
+  <div class="app-card-body">
+    <h2 class="h4 mb-3">Последние файлы</h2>
     {% if recent_files %}
-      <ul class="list-group list-group-flush">
+      <div class="d-grid gap-3">
         {% for file in recent_files %}
-        <li class="list-group-item">
-          <div><strong>Название:</strong> <a href="{% url 'download_file' file.id %}">{{ file.file.name }}</a></div>
-          <div><strong>Загружен:</strong> {{ file.uploaded_at|date:"d.m.Y H:i" }}</div>
-          {% if file.description %}<div><strong>Описание:</strong> {{ file.description }}</div>{% endif %}
-        </li>
+          <div class="result-block"><a class="file-link" href="{% url 'download_file' file.id %}">{{ file.file.name }}</a><div class="text-muted small mt-1">{{ file.uploaded_at|date:"d.m.Y H:i" }}{% if file.description %} · {{ file.description }}{% endif %}</div></div>
         {% endfor %}
-      </ul>
-    {% else %}
-      <p class="text-muted">Нет загруженных файлов.</p>
-    {% endif %}
+      </div>
+    {% else %}<p class="text-muted mb-0">Нет загруженных файлов.</p>{% endif %}
   </div>
-</div>
-{% endblock %} 
+</section>
+{% endblock %}

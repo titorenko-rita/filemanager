@@ -22,6 +22,8 @@ def send_telegram_message(text):
         logger.info(f"Сообщение успешно отправлено: {text}")
         return True
     except Exception as e:
-        logger.error(f"Ошибка отправки Telegram: {e}")
-        logger.error("Ответ сервера: %s", getattr(response, 'text', 'Нет ответа'))
+        safe_error = str(e).replace(settings.TELEGRAM_BOT_TOKEN, '<redacted>')
+        logger.error("Ошибка отправки Telegram (%s): %s", type(e).__name__, safe_error)
+        if response is not None:
+            logger.error("Telegram вернул HTTP %s", response.status_code)
         return False

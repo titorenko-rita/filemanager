@@ -1,21 +1,13 @@
 {% extends 'base.html' %}
 
-{% block title %}Статус системы{% endblock %}
+{% block title %}Статус системы · FileManager{% endblock %}
 
 {% block content %}
-<div class="container profile-container">
-    <h1>Статус системы</h1>
-    
-    <div class="status-info">
-        <h2>Общая информация</h2>
-        <p><strong>Количество пользователей:</strong> {{ total_users }}</p>
-        <p><strong>Количество файлов:</strong> {{ total_files }}</p>
-        <p><strong>Общий размер файлов:</strong> {{ total_files_size_mb }} MB</p>
-        <p><strong>Статус Email-сервиса:</strong> {{ email_status }}</p>
-    </div>
-
-    <div class="profile-actions">
-        <a href="{% url 'file_list' %}" class="button-link">К списку файлов</a>
-    </div>
+<header class="page-heading"><div><p class="eyebrow">Диагностика</p><h1 class="page-title">Статус системы</h1><p class="page-subtitle">Краткая сводка по хранилищу и настройкам сервисов.</p></div></header>
+<div class="metric-grid mb-4">
+  <div class="metric"><div class="metric-label">Пользователей</div><div class="metric-value">{{ total_users }}</div></div>
+  <div class="metric"><div class="metric-label">Файлов</div><div class="metric-value">{{ total_files }}</div></div>
+  <div class="metric"><div class="metric-label">Общий размер</div><div class="metric-value">{{ total_files_size_mb }} МБ</div></div>
 </div>
-{% endblock %} 
+<section class="app-card"><div class="app-card-body"><h2 class="h4">Email-сервис</h2><p class="text-muted mb-3">{{ email_status }}</p><a href="{% url 'file_list' %}" class="btn btn-soft">К списку файлов</a></div></section>
+{% endblock %}

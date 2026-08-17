@@ -1,12 +1,26 @@
 {% extends 'base.html' %}
+{% load crispy_forms_tags %}
 
-{% block title %}Заменить файл{% endblock %}
+{% block title %}Заменить файл · FileManager{% endblock %}
 
 {% block content %}
-<h1>Заменить файл: {{ file_instance.file.name }}</h1>
-<form method="post" enctype="multipart/form-data">
-    {% csrf_token %}
-    {{ form.as_p }}
-    <button type="submit">Заменить</button>
-</form>
-{% endblock %} 
+<header class="page-heading form-card">
+  <div>
+    <p class="eyebrow">Обновление файла</p>
+    <h1 class="page-title">Заменить файл</h1>
+    <p class="page-subtitle">Текущая версия: {{ file_instance.file.name }}</p>
+  </div>
+</header>
+<section class="app-card form-card">
+  <div class="app-card-body">
+    <form method="post" enctype="multipart/form-data" data-loading-form data-loading-title="Заменяем файл">
+      {% csrf_token %}
+      {{ form|crispy }}
+      <div class="d-flex flex-wrap gap-2 mt-4">
+        <button type="submit" class="btn btn-primary px-4">Заменить</button>
+        <a href="{% url 'file_list' %}" class="btn btn-soft">Отмена</a>
+      </div>
+    </form>
+  </div>
+</section>
+{% endblock %}

@@ -16,4 +16,4 @@ class MLResult(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"MLResult for {self.file.name} at {self.created_at}"
+        return f"MLResult for {self.file.file.name} at {self.created_at}"

@@ -1,24 +1,51 @@
 {% extends 'base.html' %}
 
-{% block title %}Результаты ML-обработки{% endblock %}
+{% block title %}ML-результаты · FileManager{% endblock %}
 
 {% block content %}
-<div class="mx-auto" style="max-width: 1200px;">
-  <h3 class="mb-4">Результаты ML-обработки</h3>
-  {% if results %}
-    {% for result in results %}
-      <div class="card mb-4 shadow-sm">
-        <div class="card-body">
-          <div class="mb-2">
-            <a href="{% url 'download_file' result.file.id %}">{{ result.file.file.name }}</a>
-            <span class="text-muted ms-3">{{ result.created_at|date:"d.m.Y H:i" }}</span>
+<header class="page-heading">
+  <div>
+    <p class="eyebrow">Автоматический анализ</p>
+    <h1 class="page-title">ML-результаты</h1>
+    <p class="page-subtitle">Распознанный текст, тональность, стиль и краткое содержание документов.</p>
+  </div>
+</header>
+{% if results %}
+  {% for result in results %}
+    <article class="app-card result-card">
+      <div class="app-card-body">
+        <div class="result-top">
+          <div>
+            <a class="file-link" href="{% url 'download_file' result.file.id %}">{{ result.file.file.name }}</a>
+            <div class="text-muted small mt-1">{{ result.created_at|date:"d.m.Y H:i" }}</div>
           </div>
-          <pre style="white-space: pre-wrap; word-break: break-all; font-size: 1rem; max-width: 100%; overflow-x: auto; background: #f8f9fa; padding: 1em; border-radius: 6px;">{{ result.data|safe }}</pre>
+          {% if result.data.error %}
+            <span class="status-pill error">● Ошибка</span>
+          {% else %}
+            <span class="status-pill success">● Обработан</span>
+          {% endif %}
         </div>
+
+        {% if result.data.error %}
+          <div class="alert alert-danger mt-3 mb-0">{{ result.data.error }}</div>
+        {% else %}
+          <div class="result-grid">
+            {% if result.data.summary %}<div class="result-block"><h3>Краткое содержание</h3><p>{{ result.data.summary }}</p></div>{% endif %}
+            {% if result.data.sentiment %}<div class="result-block"><h3>Тональность</h3><p>{{ result.data.sentiment }}</p></div>{% endif %}
+            {% if result.data.style %}<div class="result-block"><h3>Стиль</h3><p>{{ result.data.style }}</p></div>{% endif %}
+            {% if result.data.main_info %}<div class="result-block"><h3>Главная информация</h3><p>{{ result.data.main_info }}</p></div>{% endif %}
+            {% if result.data.text %}<div class="result-block"><h3>Распознанный текст</h3><p>{{ result.data.text|truncatechars:900 }}</p></div>{% endif %}
+          </div>
+          <details class="raw-result"><summary>Показать технический результат</summary><pre>{{ result.data }}</pre></details>
+        {% endif %}
       </div>
-    {% endfor %}
-  {% else %}
-    <p class="text-muted">Нет результатов обработки.</p>
-  {% endif %}
-</div>
-{% endblock %} 
+    </article>
+  {% endfor %}
+{% else %}
+  <section class="app-card empty-state">
+    <div class="empty-state-icon" aria-hidden="true">✦</div>
+    <h2 class="h4">Результатов пока нет</h2>
+    <p class="text-muted">Загрузите поддерживаемый файл, и результат появится здесь.</p>
+  </section>
+{% endif %}
+{% endblock %}

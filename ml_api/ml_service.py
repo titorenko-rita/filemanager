@@ -24,10 +24,18 @@ nlp = spacy.load("ru_core_news_sm")
 
 sentiment_tokenizer = AutoTokenizer.from_pretrained("blanchefort/rubert-base-cased-sentiment")
 sentiment_model = AutoModelForSequenceClassification.from_pretrained("blanchefort/rubert-base-cased-sentiment")
+MODEL_MAX_TOKENS = min(getattr(sentiment_model.config, "max_position_embeddings", 512), 512)
+MAX_ANALYSIS_CHARS = 100_000
 
 
 def get_sentiment(text: str) -> str:
-    inputs = sentiment_tokenizer(text, return_tensors="pt", truncation=True, padding=True)
+    inputs = sentiment_tokenizer(
+        text,
+        return_tensors="pt",
+        truncation=True,
+        max_length=MODEL_MAX_TOKENS,
+        padding=True,
+    )
     with torch.no_grad():
         logits = sentiment_model(**inputs).logits
     predicted_class_id = logits.argmax().item()
@@ -126,19 +134,23 @@ def detect_style(entities) -> str:
 
 
 def build_response(text: str):
-    entities = build_entities(text)
-    sentiment_value = get_sentiment(text)
+    original_length = len(text)
+    analyzed_text = text[:MAX_ANALYSIS_CHARS]
+    entities = build_entities(analyzed_text)
+    sentiment_value = get_sentiment(analyzed_text)
     style = detect_style(entities)
-    summary = get_summary(text)
+    summary = get_summary(analyzed_text)
     main_info = extract_main_info(entities)
 
     return {
-        "text": text,
+        "text": analyzed_text,
         "summary": summary,
         "entities": entities,
         "main_info": main_info,
         "sentiment": sentiment_value,
         "style": style,
+        "truncated": original_length > len(analyzed_text),
+        "original_length": original_length,
     }
 
 

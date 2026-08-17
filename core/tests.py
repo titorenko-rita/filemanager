@@ -338,3 +338,74 @@ class SimpleTest(TestCase):
     def test_status(self):
         response = self.client.get("/")
         self.assertIn(response.status_code, [200, 302, 403])
+
+
+@patch('core.telegram_utils.requests.post')
+def test_telegram_success(mock_post, settings):
+    from core.telegram_utils import send_telegram_message
+
+    settings.TESTING = False
+    settings.TELEGRAM_BOT_TOKEN = 'test-token'
+    settings.TELEGRAM_CHAT_ID = '123'
+    mock_post.return_value.raise_for_status.return_value = None
+
+    assert send_telegram_message('Готово') is True
+    assert mock_post.call_args.kwargs['timeout'] == 10
+
+
+@patch('core.telegram_utils.logger')
+@patch('core.telegram_utils.requests.post')
+def test_telegram_failure_redacts_token(mock_post, mock_logger, settings):
+    from core.telegram_utils import send_telegram_message
+
+    settings.TESTING = False
+    settings.TELEGRAM_BOT_TOKEN = 'secret-test-token'
+    settings.TELEGRAM_CHAT_ID = '123'
+    mock_post.side_effect = RuntimeError('url contains secret-test-token')
+
+    assert send_telegram_message('Ошибка') is False
+    assert 'secret-test-token' not in str(mock_logger.error.call_args_list)
+    assert '<redacted>' in str(mock_logger.error.call_args_list)
+
+
+def test_telegram_disabled_without_settings(settings):
+    from core.telegram_utils import send_telegram_message
+
+    settings.TESTING = False
+    settings.TELEGRAM_BOT_TOKEN = ''
+    settings.TELEGRAM_CHAT_ID = ''
+    assert send_telegram_message('Не отправлять') is False
+
+
+def test_replace_file_success(authenticated_client, admin_user, mailoutbox):
+    stored_file = StoredFile.objects.create(
+        user=admin_user,
+        file=SimpleUploadedFile('old.txt', b'old'),
+        description='Старая версия',
+    )
+    replacement = SimpleUploadedFile('new.txt', b'new')
+
+    response = authenticated_client.post(
+        reverse('replace_file', args=[stored_file.id]),
+        {'file': replacement, 'description': 'Новая версия'},
+    )
+
+    stored_file.refresh_from_db()
+    assert response.status_code == 302
+    assert os.path.basename(stored_file.file.name).startswith('new')
+    assert stored_file.description == 'Новая версия'
+    assert len(mailoutbox) == 1
+
+
+def test_delete_file_success(authenticated_client, admin_user, mailoutbox):
+    stored_file = StoredFile.objects.create(
+        user=admin_user,
+        file=SimpleUploadedFile('delete-me.txt', b'delete'),
+        description='Удалить',
+    )
+
+    response = authenticated_client.post(reverse('delete_file', args=[stored_file.id]))
+
+    assert response.status_code == 302
+    assert not StoredFile.objects.filter(id=stored_file.id).exists()
+    assert len(mailoutbox) == 1
