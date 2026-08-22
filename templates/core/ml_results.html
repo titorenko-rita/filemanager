@@ -30,8 +30,9 @@
           <div class="alert alert-danger mt-3 mb-0">{{ result.data.error }}</div>
         {% else %}
           <div class="result-grid">
+            {% if result.data.main_info.moneys %}<div class="result-block money-block"><h3>Найденные суммы</h3><div class="entity-tags">{% for value in result.data.main_info.moneys %}<span>{{ value }}</span>{% endfor %}</div></div>{% endif %}
             {% if result.data.summary %}<div class="result-block"><h3>Краткое содержание</h3><p>{{ result.data.summary }}</p></div>{% endif %}
-            {% if result.data.sentiment %}<div class="result-block"><h3>Тональность</h3><p>{{ result.data.sentiment }}</p></div>{% endif %}
+            {% if result.data.sentiment %}<div class="result-block"><h3>Тональность</h3><p>{{ result.data.sentiment }}{% if result.data.sentiment_confidence %} · уверенность {{ result.data.sentiment_confidence|floatformat:2 }}{% endif %}</p></div>{% endif %}
             {% if result.data.style %}<div class="result-block"><h3>Стиль</h3><p>{{ result.data.style }}</p></div>{% endif %}
             {% if result.data.main_info %}<div class="result-block"><h3>Главная информация</h3><p>{{ result.data.main_info }}</p></div>{% endif %}
             {% if result.data.text %}<div class="result-block"><h3>Распознанный текст</h3><p>{{ result.data.text|truncatechars:900 }}</p></div>{% endif %}

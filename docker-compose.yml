@@ -8,30 +8,41 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-filemanager}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    networks:
-      - backend
+    networks: [backend]
 
   redis:
     image: redis:7
     restart: always
-    networks:
-      - backend
+    networks: [backend]
+
+  clamav:
+    image: clamav/clamav:stable_base
+    restart: always
+    volumes:
+      - clamav_data:/var/lib/clamav
+    healthcheck:
+      test: ["CMD-SHELL", "clamdscan --ping 1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 120s
+    networks: [backend]
 
   django:
     build: .
     image: filemanager-app:local
     command: >-
       sh -c "python manage.py migrate &&
+      python manage.py setup_roles &&
       python manage.py collectstatic --noinput &&
       gunicorn filemanager.wsgi:application --bind 0.0.0.0:8000 --workers=3 --threads=2"
     volumes:
       - .:/app
       - static_volume:/app/staticfiles
       - media_volume:/app/media
-    env_file:
-      - .env
+      - backups_volume:/app/backups
+    env_file: [.env]
     environment:
-      # на случай если в .env не задано или задано неверно
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
       ML_SERVICE_URL: http://ml_service:5000
@@ -42,24 +53,21 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-filemanager}
       POSTGRES_USER: ${POSTGRES_USER:-filemanager}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-filemanager}
-    depends_on:
-      - db
-      - redis
-    networks:
-      - backend
-      - frontend
+      PRIVACY_MODE: ${PRIVACY_MODE:-True}
+      CLAMAV_ENABLED: ${CLAMAV_ENABLED:-True}
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: 3310
+      BACKUP_ROOT: /app/backups
+    depends_on: [db, redis, clamav]
+    networks: [backend, frontend]
     restart: always
 
   celery:
     build: .
     image: filemanager-app:local
     command: celery -A filemanager worker -l info --pool=solo -Q high_priority,low_priority,default
-    depends_on:
-      - django
-      - db
-      - redis
-    env_file:
-      - .env
+    depends_on: [django, db, redis, clamav]
+    env_file: [.env]
     environment:
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
@@ -70,11 +78,41 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-filemanager}
       POSTGRES_USER: ${POSTGRES_USER:-filemanager}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-filemanager}
+      PRIVACY_MODE: ${PRIVACY_MODE:-True}
+      CLAMAV_ENABLED: ${CLAMAV_ENABLED:-True}
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: 3310
+      BACKUP_ROOT: /app/backups
     volumes:
       - .:/app
       - media_volume:/app/media
-    networks:
-      - backend
+      - backups_volume:/app/backups
+    networks: [backend]
+    restart: always
+
+  celery_beat:
+    build: .
+    image: filemanager-app:local
+    command: celery -A filemanager beat -l info
+    depends_on: [django, redis]
+    env_file: [.env]
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      USE_POSTGRES: "True"
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-filemanager}
+      POSTGRES_USER: ${POSTGRES_USER:-filemanager}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-filemanager}
+      PRIVACY_MODE: ${PRIVACY_MODE:-True}
+      CLAMAV_ENABLED: "False"
+      BACKUP_ROOT: /app/backups
+    volumes:
+      - .:/app
+      - media_volume:/app/media
+      - backups_volume:/app/backups
+    networks: [backend]
     restart: always
 
   ml_service:
@@ -82,12 +120,15 @@ services:
       context: ./ml_api
     ports:
       - "5000:5000"
-    networks:
-      - backend
+    networks: [backend]
     restart: always
     volumes:
       - media_volume:/app/media
       - hf_cache:/root/.cache/huggingface
+    environment:
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      MAX_ANALYSIS_CHARS: ${MAX_ANALYSIS_CHARS:-200000}
+      MAX_SENTIMENT_CHUNKS: ${MAX_SENTIMENT_CHUNKS:-24}
 
   nginx:
     image: nginx:1.25
@@ -98,10 +139,8 @@ services:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
       - static_volume:/app/staticfiles
       - media_volume:/app/media
-    depends_on:
-      - django
-    networks:
-      - frontend
+    depends_on: [django]
+    networks: [frontend]
 
   prometheus:
     image: prom/prometheus
@@ -110,22 +149,22 @@ services:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
     ports:
       - "9090:9090"
-    networks:
-      - backend
+    networks: [backend]
 
   grafana:
     image: grafana/grafana
     restart: always
     ports:
       - "3000:3000"
-    networks:
-      - backend
+    networks: [backend]
 
 volumes:
   postgres_data:
   static_volume:
   media_volume:
   hf_cache:
+  clamav_data:
+  backups_volume:
 
 networks:
   backend:

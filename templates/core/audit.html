@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+
+{% block title %}Журнал аудита · FileManager{% endblock %}
+
+{% block content %}
+<header class="page-heading"><div><p class="eyebrow">Контроль доступа</p><h1 class="page-title">Журнал аудита</h1><p class="page-subtitle">Последние 500 значимых действий. Записи доступны администраторам и аудиторам.</p></div></header>
+<section class="app-card"><div class="table-shell"><table class="app-table">
+  <thead><tr><th>Дата</th><th>Пользователь</th><th>Действие</th><th>Файл</th><th>IP</th></tr></thead>
+  <tbody>
+  {% for event in audit_logs %}
+    <tr><td class="text-nowrap">{{ event.created_at|date:"d.m.Y H:i:s" }}</td><td>{{ event.actor.username|default:"Система" }}</td><td>{{ event.get_action_display }}</td><td>{{ event.file_name|default:"—" }}</td><td class="text-muted">{{ event.ip_address|default:"—" }}</td></tr>
+  {% empty %}
+    <tr><td colspan="5" class="text-muted">Событий пока нет.</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div></section>
+{% endblock %}

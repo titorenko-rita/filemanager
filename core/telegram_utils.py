@@ -5,7 +5,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 def send_telegram_message(text):
-    if settings.TESTING or not settings.TELEGRAM_BOT_TOKEN or not settings.TELEGRAM_CHAT_ID:
+    privacy_blocks_telegram = settings.PRIVACY_MODE and not settings.ALLOW_TELEGRAM_IN_PRIVACY_MODE
+    if (
+        settings.TESTING
+        or not settings.TELEGRAM_NOTIFICATIONS_ENABLED
+        or privacy_blocks_telegram
+        or not settings.TELEGRAM_BOT_TOKEN
+        or not settings.TELEGRAM_CHAT_ID
+    ):
         return False
 
     url = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage"

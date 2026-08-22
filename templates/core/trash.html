@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+
+{% block title %}Корзина · FileManager{% endblock %}
+
+{% block content %}
+<header class="page-heading">
+  <div>
+    <p class="eyebrow">Восстановление</p>
+    <h1 class="page-title">Корзина</h1>
+    <p class="page-subtitle">Файлы хранятся здесь ограниченное время, после чего удаляются автоматически.</p>
+  </div>
+  <a href="{% url 'file_list' %}" class="btn btn-soft">К моим файлам</a>
+</header>
+<section class="app-card">
+  {% if files %}
+    <div class="table-shell">
+      <table class="app-table">
+        <thead><tr><th>Файл</th><th>Удалён</th><th>Действия</th></tr></thead>
+        <tbody>
+        {% for file_obj in files %}
+          <tr>
+            <td><span class="file-link">{{ file_obj.file.name }}</span></td>
+            <td class="text-muted">{{ file_obj.deleted_at|date:"d.m.Y H:i" }}</td>
+            <td><div class="d-flex flex-wrap gap-2">
+              <form method="post" action="{% url 'restore_file' file_obj.id %}">{% csrf_token %}<button class="btn btn-sm btn-primary" type="submit">Восстановить</button></form>
+              <form method="post" action="{% url 'purge_file' file_obj.id %}" onsubmit="return confirm('Удалить файл окончательно? Это действие нельзя отменить.');">{% csrf_token %}<button class="btn btn-sm btn-outline-danger" type="submit">Удалить навсегда</button></form>
+            </div></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty-state"><div class="empty-state-icon">◇</div><h2 class="h4">Корзина пуста</h2><p class="text-muted">Удалённые файлы появятся здесь.</p></div>
+  {% endif %}
+</section>
+{% endblock %}

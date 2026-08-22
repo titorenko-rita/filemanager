@@ -4,7 +4,7 @@ from django.urls import reverse
 from django.core import mail
 from unittest.mock import patch
 import os
-from core.models import StoredFile
+from core.models import AuditLog, StoredFile
 from rest_framework.test import APIClient
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
@@ -49,9 +49,8 @@ def test_file_upload_authenticated(authenticated_client, test_file, mailoutbox, 
     assert StoredFile.objects.count() == initial_file_count + 1
     assert StoredFile.objects.last().description == 'A test description'
     assert StoredFile.objects.last().user.pk == admin_user.pk  # Corrected assertion to use admin_user.pk
-    assert len(mailoutbox) == 1
-    assert "Файл создан: test_file" in mailoutbox[0].subject
-    assert mailoutbox[0].subject.endswith(".txt")
+    assert len(mailoutbox) == 0
+    assert AuditLog.objects.filter(action=AuditLog.Action.UPLOAD).exists()
 
 def test_file_upload_anonymous(client, test_file, db):
     initial_file_count = StoredFile.objects.count()
@@ -84,9 +83,8 @@ def test_api_file_upload_authenticated(api_client, test_file, mailoutbox, db, ad
     assert StoredFile.objects.count() == initial_file_count + 1
     assert StoredFile.objects.last().description == 'API test description'
     assert StoredFile.objects.last().user == admin_user
-    assert len(mailoutbox) == 1
-    assert "Файл создан: test_file" in mailoutbox[0].subject
-    assert mailoutbox[0].subject.endswith(".txt")
+    assert len(mailoutbox) == 0
+    assert AuditLog.objects.filter(action=AuditLog.Action.UPLOAD).exists()
 
 
 def test_api_file_list_anonymous(client, db):
@@ -127,8 +125,8 @@ def test_api_file_update_authenticated(api_client, test_file, mailoutbox, db, ad
 
     assert response.status_code == 200  # OK
     assert StoredFile.objects.get(id=file_id).description == 'New description'
-    assert len(mailoutbox) == 1
-    assert "Файл заменен:" in mailoutbox[0].subject
+    assert len(mailoutbox) == 0
+    assert AuditLog.objects.filter(action=AuditLog.Action.REPLACE).exists()
 
 
 def test_api_file_delete_authenticated(api_client, test_file, mailoutbox, db, admin_user):
@@ -146,29 +144,34 @@ def test_api_file_delete_authenticated(api_client, test_file, mailoutbox, db, ad
     response = api_client.delete(reverse('files-detail', args=[file_id]))
 
     assert response.status_code == 204  # No Content
-    assert not StoredFile.objects.filter(id=file_id).exists()
-    assert len(mailoutbox) == 1
-    assert "Файл удален:" in mailoutbox[0].subject
+    stored_file = StoredFile.objects.get(id=file_id)
+    assert stored_file.is_deleted is True
+    assert len(mailoutbox) == 0
 
 
 # --- Tests for Email Sending (Mocking SMTP) ---
 
 @patch('core.views.EmailMessage')
 @patch('os.path.exists', return_value=True)
-def test_send_file_notification_mocked(mock_os_path_exists, mock_email_message, db, admin_user):
+def test_send_file_notification_mocked(mock_os_path_exists, mock_email_message, db, admin_user, settings):
     from core.views import send_file_notification
 
     # Create a dummy StoredFile instance with SimpleUploadedFile
     dummy_file = SimpleUploadedFile("dummy.txt", b"dummy content")
     stored_file = StoredFile.objects.create(file=dummy_file, description='Dummy file', user=admin_user)
 
+    settings.AUTOMATIC_EMAIL_NOTIFICATIONS = True
+    settings.AUTOMATIC_EMAIL_ATTACHMENTS = True
+    settings.EMAIL_CONFIGURED = True
+    settings.FILE_NOTIFICATION_EMAIL = 'notifications@example.invalid'
+    settings.PRIVACY_MODE = False
     send_file_notification(stored_file, 'создан')
 
     mock_email_message.assert_called_once()  # Check if EmailMessage was called
     args, kwargs = mock_email_message.call_args
     assert "Файл создан: dummy" in args[0]  # Check for the base filename
     assert args[0].endswith(".txt")  # Check for the extension
-    assert args[3] == [smtp-user@example.com']  # To email
+    assert args[3] == ['notifications@example.invalid']
     mock_email_message.return_value.send.assert_called_once()  # Check if send() was called
     mock_email_message.return_value.attach_file.assert_called_once()  # Check if attach_file was called
 
@@ -244,9 +247,8 @@ def test_status_page_authenticated(authenticated_client, admin_user):
 @pytest.mark.django_db
 def test_status_page_anonymous(client):
     response = client.get(reverse('status'))
-    assert response.status_code == 200
-    assert 'total_users' in response.context
-    assert 'total_files' in response.context
+    assert response.status_code == 302
+    assert '/accounts/login/' in response.url
 
 # --- Tests for Error Handling ---
 
@@ -290,11 +292,7 @@ def test_file_not_found(authenticated_client):
 # --- Tests for Email Error Handling ---
 
 @patch('core.views.EmailMessage')
-def test_email_send_failure(mock_email_message, authenticated_client, test_file):
-    # Configure mock to raise an exception
-    mock_email_message.return_value.send.side_effect = Exception("SMTP error")
-    
-    # Try to upload a file
+def test_private_upload_does_not_send_email(mock_email_message, authenticated_client, test_file):
     with open(test_file, 'rb') as f:
         response = authenticated_client.post(
             reverse('upload_file'),
@@ -303,7 +301,7 @@ def test_email_send_failure(mock_email_message, authenticated_client, test_file)
     
     assert response.status_code == 302  # Upload should still succeed
     assert StoredFile.objects.count() == 1  # File should be saved
-    mock_email_message.return_value.send.assert_called_once()  # Email attempt should be made
+    mock_email_message.assert_not_called()
 
 @patch('core.views.EmailMessage')
 def test_report_email_send_failure(mock_email_message, authenticated_client, admin_user):
@@ -331,7 +329,7 @@ def test_report_email_send_failure(mock_email_message, authenticated_client, adm
 
     assert response.status_code == 200  # Should return to form on error
     assert 'Не удалось отправить письмо через SMTP' in response.content.decode()
-    mock_email_message.return_value.send.assert_called_once()  # Email attempt should be made
+    mock_email_message.return_value.send.assert_called_once()
 
 
 class SimpleTest(TestCase):
@@ -345,6 +343,8 @@ def test_telegram_success(mock_post, settings):
     from core.telegram_utils import send_telegram_message
 
     settings.TESTING = False
+    settings.TELEGRAM_NOTIFICATIONS_ENABLED = True
+    settings.PRIVACY_MODE = False
     settings.TELEGRAM_BOT_TOKEN = 'test-token'
     settings.TELEGRAM_CHAT_ID = '123'
     mock_post.return_value.raise_for_status.return_value = None
@@ -359,6 +359,8 @@ def test_telegram_failure_redacts_token(mock_post, mock_logger, settings):
     from core.telegram_utils import send_telegram_message
 
     settings.TESTING = False
+    settings.TELEGRAM_NOTIFICATIONS_ENABLED = True
+    settings.PRIVACY_MODE = False
     settings.TELEGRAM_BOT_TOKEN = 'secret-test-token'
     settings.TELEGRAM_CHAT_ID = '123'
     mock_post.side_effect = RuntimeError('url contains secret-test-token')
@@ -394,7 +396,7 @@ def test_replace_file_success(authenticated_client, admin_user, mailoutbox):
     assert response.status_code == 302
     assert os.path.basename(stored_file.file.name).startswith('new')
     assert stored_file.description == 'Новая версия'
-    assert len(mailoutbox) == 1
+    assert len(mailoutbox) == 0
 
 
 def test_delete_file_success(authenticated_client, admin_user, mailoutbox):
@@ -407,5 +409,7 @@ def test_delete_file_success(authenticated_client, admin_user, mailoutbox):
     response = authenticated_client.post(reverse('delete_file', args=[stored_file.id]))
 
     assert response.status_code == 302
-    assert not StoredFile.objects.filter(id=stored_file.id).exists()
-    assert len(mailoutbox) == 1
+    stored_file.refresh_from_db()
+    assert stored_file.is_deleted is True
+    assert stored_file.deleted_at is not None
+    assert len(mailoutbox) == 0

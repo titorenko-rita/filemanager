@@ -23,4 +23,5 @@ pypdf
 sentry-sdk
 django-prometheus
 prometheus-flask-exporter
+clamd==1.0.2
 

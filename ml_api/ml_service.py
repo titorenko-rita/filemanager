@@ -7,6 +7,9 @@ import torch
 import re
 from collections import defaultdict
 import platform
+import os
+import math
+from collections import Counter
 from prometheus_flask_exporter import PrometheusMetrics
 
 app = Flask(__name__)
@@ -25,21 +28,43 @@ nlp = spacy.load("ru_core_news_sm")
 sentiment_tokenizer = AutoTokenizer.from_pretrained("blanchefort/rubert-base-cased-sentiment")
 sentiment_model = AutoModelForSequenceClassification.from_pretrained("blanchefort/rubert-base-cased-sentiment")
 MODEL_MAX_TOKENS = min(getattr(sentiment_model.config, "max_position_embeddings", 512), 512)
-MAX_ANALYSIS_CHARS = 100_000
+MAX_ANALYSIS_CHARS = int(os.environ.get('MAX_ANALYSIS_CHARS', '200000'))
+MAX_SENTIMENT_CHUNKS = int(os.environ.get('MAX_SENTIMENT_CHUNKS', '24'))
+SENTIMENT_BATCH_SIZE = 4
 
 
-def get_sentiment(text: str) -> str:
-    inputs = sentiment_tokenizer(
-        text,
-        return_tensors="pt",
-        truncation=True,
-        max_length=MODEL_MAX_TOKENS,
-        padding=True,
+def get_sentiment(text: str):
+    """Агрегирует тональность репрезентативных частей всего документа."""
+    token_ids = sentiment_tokenizer.encode(text, add_special_tokens=False)
+    content_size = max(MODEL_MAX_TOKENS - 2, 1)
+    chunks = [token_ids[start:start + content_size] for start in range(0, len(token_ids), content_size)]
+    if not chunks:
+        chunks = [[]]
+    if len(chunks) > MAX_SENTIMENT_CHUNKS:
+        indexes = {
+            round(index * (len(chunks) - 1) / (MAX_SENTIMENT_CHUNKS - 1))
+            for index in range(MAX_SENTIMENT_CHUNKS)
+        }
+        chunks = [chunks[index] for index in sorted(indexes)]
+
+    probability_batches = []
+    for start in range(0, len(chunks), SENTIMENT_BATCH_SIZE):
+        prepared = [
+            {'input_ids': sentiment_tokenizer.build_inputs_with_special_tokens(chunk)}
+            for chunk in chunks[start:start + SENTIMENT_BATCH_SIZE]
+        ]
+        inputs = sentiment_tokenizer.pad(prepared, padding=True, return_tensors='pt')
+        with torch.no_grad():
+            logits = sentiment_model(**inputs).logits
+            probability_batches.append(torch.softmax(logits, dim=-1))
+
+    probabilities = torch.cat(probability_batches).mean(dim=0)
+    predicted_class_id = probabilities.argmax().item()
+    return (
+        sentiment_model.config.id2label[predicted_class_id].lower(),
+        round(probabilities[predicted_class_id].item(), 4),
+        len(chunks),
     )
-    with torch.no_grad():
-        logits = sentiment_model(**inputs).logits
-    predicted_class_id = logits.argmax().item()
-    return sentiment_model.config.id2label[predicted_class_id].lower()
 
 
 if platform.system() == "Windows":
@@ -50,12 +75,27 @@ TESSDATA_DIR = "/usr/share/tesseract-ocr/5/tessdata"
 BAD_ENTS = {"МОБЯЗЫВАЮ", "Выберите", "Заместителя", "Юрисконсульт"}
 
 DATE_REGEX = r"(\d{1,2}[\.\-/ ]\d{1,2}[\.\-/ ]\d{2,4}|\d{1,2} [а-яА-Я]+ \d{4}|\d{4})"
-MONEY_REGEX = r"(\d+[\s\u00A0]?(руб\.|евро|доллар|₽|€|\$))"
+MONEY_REGEX = (
+    r"(?<!\w)(?:\d{1,3}(?:[\s\u00A0]\d{3})+|\d+)"
+    r"(?:[.,]\d{1,2})?\s*(?:руб(?:лей|ля|ль|\.)?|₽|евро|€|"
+    r"доллар(?:ов|а)?|долл\.?|USD|EUR|RUB|\$)(?!\w)"
+)
 
 
 def get_summary(text: str, n_sentences: int = 2) -> str:
-    sentences = re.split(r"[.!?\n]", text)
-    return ". ".join([s.strip() for s in sentences if s.strip()][:n_sentences])
+    sentences = [sentence.strip() for sentence in re.split(r"(?<=[.!?])\s+|\n+", text) if sentence.strip()]
+    if len(sentences) <= n_sentences:
+        return ' '.join(sentences)
+    words = re.findall(r"[а-яА-ЯёЁa-zA-Z]{4,}", text.lower())
+    stop_words = {'который', 'которая', 'которые', 'этого', 'этой', 'были', 'будет', 'также', 'если', 'чтобы'}
+    frequencies = Counter(word for word in words if word not in stop_words)
+    scored = []
+    for index, sentence in enumerate(sentences):
+        sentence_words = re.findall(r"[а-яА-ЯёЁa-zA-Z]{4,}", sentence.lower())
+        score = sum(frequencies[word] for word in sentence_words) / math.sqrt(max(len(sentence_words), 1))
+        scored.append((score, index, sentence))
+    selected = sorted(sorted(scored, reverse=True)[:n_sentences], key=lambda item: item[1])
+    return ' '.join(item[2] for item in selected)
 
 
 def extract_main_info(entities):
@@ -63,7 +103,7 @@ def extract_main_info(entities):
     for ent in entities:
         t = ent.get("type")
         v = ent.get("text")
-        if t == "PERSON":
+        if t in {"PERSON", "PER"}:
             info["names"].append(v)
         elif t == "ORG":
             info["orgs"].append(v)
@@ -97,30 +137,33 @@ def get_text_from_request() -> str | None:
 def build_entities(text: str):
     doc = nlp(text)
 
-    entities = [
-        {"type": ent.label_, "text": ent.text}
-        for ent in doc.ents
-        if ent.text not in BAD_ENTS and len(ent.text) > 2
-    ]
+    entities = []
+    seen = set()
+
+    def append_entity(entity_type, value):
+        cleaned = re.sub(r"\s+", " ", value).strip()
+        key = (entity_type, cleaned.casefold())
+        if cleaned and key not in seen:
+            seen.add(key)
+            entities.append({"type": entity_type, "text": cleaned})
+
+    for ent in doc.ents:
+        if ent.text not in BAD_ENTS and len(ent.text) > 2:
+            append_entity(ent.label_, ent.text)
 
     # Телефоны
     phones = re.findall(r"\+?\d[\d\s\-\(\)]{7,}\d", text)
     for phone in phones:
-        if not any(e["text"] == phone for e in entities):
-            entities.append({"type": "PHONE", "text": phone})
+        append_entity('PHONE', phone)
 
-    # Деньги (findall -> список tuple, берём первый элемент)
     moneys = re.findall(MONEY_REGEX, text, re.IGNORECASE)
     for money in moneys:
-        money_text = money[0] if isinstance(money, tuple) else str(money)
-        if not any(e["text"] == money_text for e in entities):
-            entities.append({"type": "MONEY", "text": money_text})
+        append_entity('MONEY', money)
 
     # Даты
     dates = re.findall(DATE_REGEX, text)
     for date in dates:
-        if not any(e["text"] == date for e in entities):
-            entities.append({"type": "DATE", "text": date})
+        append_entity('DATE', date)
 
     return entities
 
@@ -137,7 +180,7 @@ def build_response(text: str):
     original_length = len(text)
     analyzed_text = text[:MAX_ANALYSIS_CHARS]
     entities = build_entities(analyzed_text)
-    sentiment_value = get_sentiment(analyzed_text)
+    sentiment_value, sentiment_confidence, sentiment_chunks = get_sentiment(analyzed_text)
     style = detect_style(entities)
     summary = get_summary(analyzed_text)
     main_info = extract_main_info(entities)
@@ -148,6 +191,8 @@ def build_response(text: str):
         "entities": entities,
         "main_info": main_info,
         "sentiment": sentiment_value,
+        "sentiment_confidence": sentiment_confidence,
+        "sentiment_chunks": sentiment_chunks,
         "style": style,
         "truncated": original_length > len(analyzed_text),
         "original_length": original_length,

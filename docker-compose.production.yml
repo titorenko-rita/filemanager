@@ -1,0 +1,20 @@
+services:
+  django:
+    environment:
+      DJANGO_DEBUG: "False"
+      DJANGO_SECURE_SSL_REDIRECT: "True"
+      DJANGO_SESSION_COOKIE_SECURE: "True"
+      DJANGO_CSRF_COOKIE_SECURE: "True"
+      DJANGO_BEHIND_HTTPS_PROXY: "True"
+      DJANGO_SECURE_HSTS_SECONDS: "31536000"
+      DJANGO_SECURE_HSTS_PRELOAD: "False"
+
+  nginx:
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.https.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media

@@ -9,5 +9,16 @@
   <div class="metric"><div class="metric-label">Файлов</div><div class="metric-value">{{ total_files }}</div></div>
   <div class="metric"><div class="metric-label">Общий размер</div><div class="metric-value">{{ total_files_size_mb }} МБ</div></div>
 </div>
-<section class="app-card"><div class="app-card-body"><h2 class="h4">Email-сервис</h2><p class="text-muted mb-3">{{ email_status }}</p><a href="{% url 'file_list' %}" class="btn btn-soft">К списку файлов</a></div></section>
+<section class="app-card"><div class="app-card-body">
+  <h2 class="h4">Приватность и интеграции</h2>
+  <div class="status-list">
+    <div><span>Приватный режим</span><strong>{{ privacy_mode|yesno:"включён,выключен" }}</strong></div>
+    <div><span>Антивирус ClamAV</span><strong>{{ clamav_enabled|yesno:"включён,выключен" }}</strong></div>
+    <div><span>Автоматические письма</span><strong>{{ automatic_email_enabled|yesno:"включены,выключены" }}</strong></div>
+    <div><span>Telegram-уведомления</span><strong>{{ telegram_enabled|yesno:"включены,выключены" }}</strong></div>
+    <div><span>SMTP</span><strong>{{ email_status }}</strong></div>
+  </div>
+  <p class="text-muted small mt-3">Явная команда «Отправить отчёт» передаёт выбранный файл указанному получателю даже в приватном режиме.</p>
+  <a href="{% url 'file_list' %}" class="btn btn-soft mt-3">К списку файлов</a>
+</div></section>
 {% endblock %}

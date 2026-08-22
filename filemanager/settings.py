@@ -20,10 +20,15 @@ from sentry_sdk.integrations.django import DjangoIntegration
 # Load environment variables from .env file
 load_dotenv()
 
+
+def env_bool(name, default=False):
+    return os.environ.get(name, str(default)).strip().lower() in {'1', 'true', 'yes', 'on'}
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-TESTING = 'pytest' in sys.modules or os.environ.get('DJANGO_TESTING') == 'True'
+TESTING = 'pytest' in sys.modules or env_bool('DJANGO_TESTING')
+PRIVACY_MODE = env_bool('PRIVACY_MODE', True)
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
@@ -32,9 +37,10 @@ TESTING = 'pytest' in sys.modules or os.environ.get('DJANGO_TESTING') == 'True'
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'unsafe-development-key-change-me')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
+DEBUG = env_bool('DJANGO_DEBUG', True)
 
 ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', '127.0.0.1 localhost').split()
+CSRF_TRUSTED_ORIGINS = os.environ.get('DJANGO_CSRF_TRUSTED_ORIGINS', '').split()
 
 
 # Application definition
@@ -147,7 +153,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'ru'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = os.environ.get('DJANGO_TIME_ZONE', 'Europe/Moscow')
 
 USE_I18N = True
 
@@ -171,6 +177,27 @@ STATICFILES_DIRS = [
 # Media files
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+FILE_UPLOAD_PERMISSIONS = 0o600
+FILE_UPLOAD_DIRECTORY_PERMISSIONS = 0o700
+
+# Безопасность загружаемых данных. Проверка формата выполняется всегда,
+# ClamAV можно отключить только явно для облегчённой локальной разработки.
+MAX_UPLOAD_SIZE_MB = int(os.environ.get('MAX_UPLOAD_SIZE_MB', '25'))
+MAX_EXTRACTED_FILE_SIZE_MB = int(os.environ.get('MAX_EXTRACTED_FILE_SIZE_MB', '100'))
+MAX_IMAGE_PIXELS = int(os.environ.get('MAX_IMAGE_PIXELS', '40000000'))
+ALLOWED_UPLOAD_EXTENSIONS = tuple(
+    value.strip().lower()
+    for value in os.environ.get(
+        'ALLOWED_UPLOAD_EXTENSIONS',
+        '.docx,.pdf,.txt,.md,.csv,.jpg,.jpeg,.png',
+    ).split(',')
+    if value.strip()
+)
+CLAMAV_ENABLED = env_bool('CLAMAV_ENABLED', False) and not TESTING
+CLAMAV_FAIL_CLOSED = env_bool('CLAMAV_FAIL_CLOSED', True)
+CLAMAV_HOST = os.environ.get('CLAMAV_HOST', 'clamav')
+CLAMAV_PORT = int(os.environ.get('CLAMAV_PORT', '3310'))
+CLAMAV_TIMEOUT = int(os.environ.get('CLAMAV_TIMEOUT', '30'))
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -185,16 +212,20 @@ EMAIL_BACKEND = os.environ.get(
 )
 EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.mail.ru')
 EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '465'))
-EMAIL_USE_SSL = os.environ.get('EMAIL_USE_SSL', 'True') == 'True'
-EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'False') == 'True'
+EMAIL_USE_SSL = env_bool('EMAIL_USE_SSL', True)
+EMAIL_USE_TLS = env_bool('EMAIL_USE_TLS', False)
 EMAIL_TIMEOUT = float(os.environ.get('EMAIL_TIMEOUT', '10'))
-EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', smtp-user@example.com')
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL') or EMAIL_HOST_USER
 FILE_NOTIFICATION_EMAIL = os.environ.get('FILE_NOTIFICATION_EMAIL') or EMAIL_HOST_USER
 EMAIL_CONFIGURED = TESTING or bool(EMAIL_HOST_USER and EMAIL_HOST_PASSWORD)
 if not EMAIL_CONFIGURED:
     EMAIL_BACKEND = 'django.core.mail.backends.dummy.EmailBackend'
+
+# В приватном режиме файлы покидают приложение только при явной отправке отчёта.
+AUTOMATIC_EMAIL_NOTIFICATIONS = env_bool('AUTOMATIC_EMAIL_NOTIFICATIONS', False)
+AUTOMATIC_EMAIL_ATTACHMENTS = env_bool('AUTOMATIC_EMAIL_ATTACHMENTS', False)
 
 # Authentication settings
 AUTHENTICATION_BACKENDS = [
@@ -223,6 +254,19 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',
     'PAGE_SIZE': 10 # Set default page size to 10
 }
+
+# Защита production-развёртывания. Локальный HTTP остаётся рабочим по умолчанию.
+SECURE_SSL_REDIRECT = env_bool('DJANGO_SECURE_SSL_REDIRECT', False)
+SESSION_COOKIE_SECURE = env_bool('DJANGO_SESSION_COOKIE_SECURE', False)
+CSRF_COOKIE_SECURE = env_bool('DJANGO_CSRF_COOKIE_SECURE', False)
+SESSION_COOKIE_HTTPONLY = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'
+SECURE_HSTS_SECONDS = int(os.environ.get('DJANGO_SECURE_HSTS_SECONDS', '0'))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = SECURE_HSTS_SECONDS > 0
+SECURE_HSTS_PRELOAD = env_bool('DJANGO_SECURE_HSTS_PRELOAD', False)
+if env_bool('DJANGO_BEHIND_HTTPS_PROXY', False):
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # Logging configuration
 LOG_DIR = BASE_DIR / 'logs'
@@ -284,6 +328,8 @@ INTERNAL_IPS = [
 # Telegram Configuration
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '')
 TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')
+TELEGRAM_NOTIFICATIONS_ENABLED = env_bool('TELEGRAM_NOTIFICATIONS_ENABLED', False)
+ALLOW_TELEGRAM_IN_PRIVACY_MODE = env_bool('ALLOW_TELEGRAM_IN_PRIVACY_MODE', False)
 
 # Celery Configuration
 CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379/0')
@@ -300,6 +346,24 @@ CELERY_TASK_QUEUES = (
     Queue('low_priority'),
 )
 
+TRASH_RETENTION_DAYS = int(os.environ.get('TRASH_RETENTION_DAYS', '30'))
+AUDIT_RETENTION_DAYS = int(os.environ.get('AUDIT_RETENTION_DAYS', '365'))
+BACKUP_RETENTION_DAYS = int(os.environ.get('BACKUP_RETENTION_DAYS', '14'))
+BACKUP_ROOT = Path(os.environ.get('BACKUP_ROOT', BASE_DIR / 'backups'))
+
+CELERY_BEAT_SCHEDULE = {
+    'apply-retention-policy-daily': {
+        'task': 'core.tasks.apply_retention_policy',
+        'schedule': 60 * 60 * 24,
+        'options': {'queue': 'low_priority'},
+    },
+    'create-backup-daily': {
+        'task': 'core.tasks.create_project_backup',
+        'schedule': 60 * 60 * 24,
+        'options': {'queue': 'low_priority'},
+    },
+}
+
 # S3 storage settings
 # DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
 # AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
@@ -311,7 +375,7 @@ CELERY_TASK_QUEUES = (
 
 SENTRY_DSN = os.environ.get('SENTRY_DSN', '')
 
-if SENTRY_DSN and not TESTING:
+if SENTRY_DSN and not TESTING and not PRIVACY_MODE:
     sentry_sdk.init(
         dsn=SENTRY_DSN,
         integrations=[DjangoIntegration()],

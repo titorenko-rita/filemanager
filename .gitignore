@@ -17,6 +17,9 @@ venv310/
 logs/
 media/
 staticfiles/
+backups/
+certs/*.pem
+celerybeat-schedule*
 
 # Local configuration and credentials
 .env

@@ -11,5 +11,7 @@ from celery.signals import worker_ready
 
 @worker_ready.connect
 def at_start(sender, **kwargs):
+    from django.conf import settings
     from core.telegram_utils import send_telegram_message
-    send_telegram_message("🚀 Celery worker запущен!")
+    if settings.TELEGRAM_NOTIFICATIONS_ENABLED:
+        send_telegram_message("🚀 Celery worker запущен!")
